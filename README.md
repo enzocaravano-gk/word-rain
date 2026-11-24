@@ -1,4 +1,4 @@
-# Pioggia di Parole
+# Word Rain — Pioggia di Parole
 
 Gioco di digitazione in stile retro: le parole cadono dall'alto dentro pillole colorate e vanno scritte prima che tocchino terra.
 
@@ -10,3 +10,5 @@ Gioco di digitazione in stile retro: le parole cadono dall'alto dentro pillole c
 - Funziona anche su telefono con tastiera su schermo
 
 Per giocare in locale basta aprire `index.html` nel browser.
+
+Nessuna risorsa esterna: niente font, script o librerie caricati da altri server.

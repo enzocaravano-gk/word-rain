@@ -7,8 +7,6 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
 <title>Pioggia di Parole</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
   html, body {
     margin: 0; padding: 0; overflow: hidden; background: #000;
@@ -25,7 +23,7 @@
     background: linear-gradient(#2b2b2b, #151515);
     border-top: 3px solid #555;
     padding: 8px 4px calc(10px + env(safe-area-inset-bottom));
-    font-family: "Press Start 2P", "Courier New", monospace;
+    font-family: ui-monospace, Menlo, Consolas, "Courier New", monospace; font-weight: bold;
   }
   body.touch #kb { display: block; }
   .kb-row { display: flex; justify-content: center; gap: 5px; margin-bottom: 7px; }
@@ -52,7 +50,6 @@
 //  PIOGGIA DI PAROLE — gioco di digitazione
 // =====================================================================
 
-const FONT = '"Press Start 2P", "Courier New", monospace';
 const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 const HS_KEY = 'pioggiaDiParole_classifica';
 const HS_MAX = 10;
@@ -137,6 +134,96 @@ function themeToNum(t) {
 }
 const NUM_THEMES = THEMES.map(themeToNum);
 let bg = JSON.parse(JSON.stringify(NUM_THEMES[0]));
+
+
+// ---------- Font pixel 5x7 disegnato a mano (nessun font esterno) ----------
+const GLYPH_SRC = {
+  A:'.###.#...##...#######...##...##...#', B:'####.#...##...#####.#...##...#####.',
+  C:'.###.#...##....#....#....#...#.###.', D:'####.#...##...##...##...##...#####.',
+  E:'######....#....####.#....#....#####', F:'######....#....####.#....#....#....',
+  G:'.###.#...##....#.####...##...#.####', H:'#...##...##...#######...##...##...#',
+  I:'.###...#....#....#....#....#...###.', J:'..###...#....#....#.#..#.#..#..##..',
+  K:'#...##..#.#.#..##...#.#..#..#.#...#', L:'#....#....#....#....#....#....#####',
+  M:'#...###.###.#.##.#.##...##...##...#', N:'#...###..##.#.##..###...##...##...#',
+  O:'.###.#...##...##...##...##...#.###.', P:'####.#...##...#####.#....#....#....',
+  Q:'.###.#...##...##...##.#.##..#..##.#', R:'####.#...##...#####.#.#..#..#.#...#',
+  S:'.#####....#.....###.....#....#####.', T:'#####..#....#....#....#....#....#..',
+  U:'#...##...##...##...##...##...#.###.', V:'#...##...##...##...##...#.#.#...#..',
+  W:'#...##...##...##.#.##.#.##.#.#.#.#.', X:'#...##...#.#.#...#...#.#.#...##...#',
+  Y:'#...##...#.#.#...#....#....#....#..', Z:'#####....#...#...#...#...#....#####',
+  '0':'.###.#...##..###.#.###..##...#.###.', '1':'..#...##....#....#....#....#...###.',
+  '2':'.###.#...#....#...#...#...#...#####', '3':'####.....#....#.###.....#....#####.',
+  '4':'...#...##..#.#.#..#.#####...#....#.', '5':'######....####.....#....##...#.###.',
+  '6':'.###.#....#....####.#...##...#.###.', '7':'#####....#...#...#...#....#....#...',
+  '8':'.###.#...##...#.###.#...##...#.###.', '9':'.###.#...##...#.####....#....#.###.',
+  ' ':'...................................', ':':'.......#....#.........#....#.......',
+  '!':'..#....#....#....#....#.........#..', '%':'##..###..#...#...#...#...#..###..##',
+  '+':'.......#....#..#####..#....#.......', '-':'...............#####...............',
+  '.':'..............................##...', ',':'.........................##....#...',
+  '/':'....#....#...#...#...#...#....#....', '=':'..........#####.....#####..........',
+  '_':'..............................#####', '?':'.###.#...#....#...#...#.........#..',
+  "'":'..#....#...#.......................', '(':'...#...#...#....#....#.....#.....#.',
+  ')':'.#.....#.....#....#....#...#...#...',
+};
+const GLYPHS = {};
+for (const k in GLYPH_SRC) {
+  const px = [];
+  [...GLYPH_SRC[k]].forEach((c, i) => { if (c === '#') px.push([i % 5, (i / 5) | 0]); });
+  GLYPHS[k] = px;
+}
+const measureCtx = document.createElement('canvas').getContext('2d');
+function fallbackW(ch, size) { measureCtx.font = `${size}px ${EMOJI_FONT}`; return measureCtx.measureText(ch).width + size / 7; }
+// larghezza di una stringa: ogni carattere = 5 pixel + 1 di spazio (pixel = size/7)
+function textW(str, size) {
+  const cell = size / 7;
+  let w = 0;
+  for (const ch of str) w += GLYPHS[ch.toUpperCase()] ? cell * 6 : fallbackW(ch, size);
+  return Math.max(0, w - cell);
+}
+// le scritte vengono disegnate una volta su un canvas nascosto e poi riutilizzate
+const strCache = new Map();
+function renderStr(str, size, color, outline) {
+  const key = str + '|' + size.toFixed(1) + '|' + color + '|' + (outline ? 1 : 0) + '|' + DPR;
+  let c = strCache.get(key);
+  if (c) return c;
+  if (strCache.size > 600) strCache.clear();
+  const cell = size / 7, o = outline ? Math.max(1.5, cell * 0.9) : 0;
+  const w = textW(str, size) + o * 2, h = size + o * 2;
+  c = document.createElement('canvas');
+  c.width = Math.ceil(w * DPR) + 1; c.height = Math.ceil(h * DPR) + 1;
+  const g = c.getContext('2d');
+  const pass = (col, grow) => {
+    g.fillStyle = col;
+    let x = o;
+    for (const ch of str) {
+      const gl = GLYPHS[ch.toUpperCase()];
+      if (gl) {
+        for (const [cx, cy] of gl) {
+          const x1 = Math.round((x + cx * cell - grow) * DPR), y1 = Math.round((o + cy * cell - grow) * DPR);
+          const x2 = Math.round((x + (cx + 1) * cell + grow) * DPR), y2 = Math.round((o + (cy + 1) * cell + grow) * DPR);
+          g.fillRect(x1, y1, x2 - x1, y2 - y1);
+        }
+        x += cell * 6;
+      } else {
+        if (!grow) {
+          g.font = `${size * DPR}px ${EMOJI_FONT}`; g.textBaseline = 'middle';
+          g.fillText(ch, x * DPR, (o + size / 2) * DPR);
+        }
+        x += fallbackW(ch, size);
+      }
+    }
+  };
+  if (outline) pass('rgba(0,0,0,0.85)', o);
+  pass(color, 0);
+  c.o = o; c.cw = c.width / DPR; c.ch = c.height / DPR;
+  strCache.set(key, c);
+  return c;
+}
+// disegna la stringa con l'angolo in alto a sinistra in (x, y)
+function blitStr(str, x, y, size, color, outline) {
+  const c = renderStr(str, size, color, outline);
+  ctx.drawImage(c, x - c.o, y - c.o, c.cw, c.ch);
+}
 
 // ---------- Canvas ----------
 const stage = document.getElementById('stage');
@@ -269,8 +356,7 @@ function newGame() {
 }
 
 function measure(text, fs = FS) {
-  ctx.font = `${fs}px ${FONT}`;
-  return ctx.measureText(text).width + fs * 2;
+  return textW(text, fs) + fs * 2;
 }
 
 function pickWord() {
@@ -679,19 +765,14 @@ function drawPill(x, y, w, str, color, opt = {}) {
   roundRect(x, y, w, h, h / 2);
   ctx.stroke();
 
-  ctx.font = `${fs}px ${FONT}`;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  const tx = x + fs, ty = y + h / 2 + 1;
+  const tx = x + fs, ty = y + h / 2;
   const done = str.slice(0, typed), rest = str.slice(typed);
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.fillText(done, tx, ty);
-  const dw = ctx.measureText(done).width;
-  ctx.fillStyle = dim ? '#333' : '#111';
-  ctx.fillText(rest, tx + dw, ty);
+  const dw = done ? textW(done, fs) + fs / 7 : 0;
+  if (done) blitStr(done, tx, ty - fs / 2, fs, 'rgba(0,0,0,0.28)', false);
+  if (rest) blitStr(rest, tx + dw, ty - fs / 2, fs, dim ? '#333' : '#111', false);
   if (isTarget && rest.length) {
     ctx.fillStyle = '#111';
-    ctx.fillRect(tx + dw, ty + fs * 0.7, ctx.measureText(rest[0]).width, 3);
+    ctx.fillRect(tx + dw, ty + fs * 0.65, textW(rest[0], fs), 3);
   }
   ctx.restore();
 }
@@ -746,14 +827,11 @@ function drawObject(o) {
 
 // testo con contorno; si rimpicciolisce da solo se non entra nello schermo
 function text(str, x, y, size, color, align = 'center', outline = true) {
-  ctx.font = `${size}px ${FONT}`;
-  const mw = ctx.measureText(str).width, max = W - 16;
-  if (mw > max) { size *= max / mw; ctx.font = `${size}px ${FONT}`; }
-  ctx.textAlign = align;
-  ctx.textBaseline = 'middle';
-  if (outline) { ctx.lineWidth = Math.max(3, size / 4); ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineJoin = 'round'; ctx.strokeText(str, x, y); }
-  ctx.fillStyle = color;
-  ctx.fillText(str, x, y);
+  let mw = textW(str, size);
+  const max = W - 16;
+  if (mw > max) { size *= max / mw; mw = max; }
+  const x0 = align === 'center' ? x - mw / 2 : (align === 'right' ? x - mw : x);
+  blitStr(str, x0, y - size / 2, size, color, outline);
 }
 
 function hudBox(x, y, w, h, border) {
@@ -768,8 +846,7 @@ function drawHUD() {
   // --- punteggio (sinistra) e record (destra), stessi riquadri grandi ---
   const big = COMPACT ? Math.min(s * 1.7, (W - pad * 4) / 13) : s * 2.1;
   const lab = Math.max(9, big * 0.34);
-  ctx.font = `${big}px ${FONT}`;
-  const nw = ctx.measureText('000000').width;
+  const nw = textW('000000', big);
   const bw = nw + 20, bh = big + lab + 26;
   hudBox(pad, pad, bw, bh, '#ffe066');
   text('PUNTI', pad + 10, pad + 8 + lab / 2, lab, '#ffe066', 'left', false);
