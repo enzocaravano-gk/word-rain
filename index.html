@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
@@ -17,34 +17,19 @@
   #stage { position: relative; flex: 1; min-height: 0; }
   canvas { position: absolute; inset: 0; display: block; }
 
-  /* ---------- Tastiera su schermo (stile macchina da scrivere) ---------- */
-  #kb {
-    display: none; flex: none;
-    background: linear-gradient(#2b2b2b, #151515);
-    border-top: 3px solid #555;
-    padding: 8px 4px calc(10px + env(safe-area-inset-bottom));
-    font-family: ui-monospace, Menlo, Consolas, "Courier New", monospace; font-weight: bold;
+  body.kbfix { position: fixed; left: 0; right: 0; top: 0; }
+  /* campo invisibile: riceve i tasti della tastiera del telefono */
+  #ti {
+    position: fixed; left: 0; bottom: 0; width: 1px; height: 1px;
+    opacity: 0; border: 0; padding: 0; margin: 0;
+    font-size: 16px; /* evita lo zoom automatico su iPhone */
+    caret-color: transparent; background: transparent; color: transparent;
   }
-  body.touch #kb { display: block; }
-  .kb-row { display: flex; justify-content: center; gap: 5px; margin-bottom: 7px; }
-  .kb-row:last-child { margin-bottom: 0; }
-  .key {
-    flex: 0 1 9.2%; max-width: 58px; height: 48px;
-    display: flex; align-items: center; justify-content: center;
-    color: #f4f1e6; font-size: 15px;
-    background: radial-gradient(circle at 50% 35%, #3a3a3a, #101010 70%);
-    border: 3px solid #b9b9b9; border-radius: 50%;
-    box-shadow: 0 4px 0 #000, inset 0 2px 3px rgba(255,255,255,0.25);
-    cursor: pointer; touch-action: none;
-  }
-  .key.wide { flex: 0 1 15%; max-width: 92px; border-radius: 14px; font-size: 11px; }
-  .key.down { transform: translateY(3px); box-shadow: 0 1px 0 #000, inset 0 2px 3px rgba(0,0,0,0.5); background: #ffe066; color: #111; }
-  @media (max-height: 640px) { .key { height: 40px; font-size: 13px; } }
 </style>
 </head>
 <body>
 <div id="stage"><canvas id="c"></canvas></div>
-<div id="kb"></div>
+<input id="ti" type="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-label="Scrivi le parole">
 <script>
 // =====================================================================
 //  WORD RAIN — gioco di digitazione
@@ -58,9 +43,9 @@ const GRACE = 4;            // secondi di "ultima occasione" a terra
 const BONUS_POINTS = 20;    // punti per ogni oggetto nel livello bonus
 const BONUS_PERFECT = 300;  // premio se si prendono tutti gli oggetti
 
-// Dispositivo touch → mostra la tastiera su schermo (forzabile con ?tastiera=1 / ?tastiera=0)
+// Dispositivo touch → si usa la tastiera del telefono (forzabile con ?touch=1 / ?touch=0)
 const qs = new URLSearchParams(location.search);
-const TOUCH = qs.has('tastiera') ? qs.get('tastiera') !== '0'
+const TOUCH = qs.has('touch') ? qs.get('touch') !== '0'
             : (navigator.maxTouchPoints > 0 || 'ontouchstart' in window || matchMedia('(pointer: coarse)').matches);
 if (TOUCH) document.body.classList.add('touch');
 
@@ -581,48 +566,67 @@ function handleKey(k) {
   if (isComplete(target, target.buf)) destroyWord(target);
 }
 
+const ti = document.getElementById('ti');
+
 addEventListener('keydown', e => {
-  if (e.key === 'Backspace' || e.key === ' ' || e.key === 'Tab') e.preventDefault();
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // le lettere e il backspace scritti nel campo invisibile arrivano dall'evento "input"
+  if (e.target === ti && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Unidentified' || e.key === 'Process')) return;
+  if (e.key === 'Backspace' || e.key === ' ' || e.key === 'Tab') e.preventDefault();
+  if (e.key === 'Enter' && e.target === ti) e.preventDefault();
   handleKey(e.key);
-  const el = keyEls[e.key.toUpperCase()] || keyEls[e.key];
-  if (el) flashKey(el);
 });
 
-// tocco sul campo di gioco: avvia / continua / pausa
-canvas.addEventListener('pointerdown', e => {
-  e.preventDefault();
-  if (state === 'play') { if (e.pointerType !== 'mouse') handleKey('Escape'); }
-  else if (state === 'pause') handleKey('Escape');
+// ---------- Tastiera del telefono ----------
+// Il campo invisibile contiene sempre due spazi: così anche il backspace viene rilevato.
+const SENT = '  ';
+let prevVal = SENT, composing = false;
+function resetInput() { ti.value = SENT; prevVal = SENT; try { ti.setSelectionRange(SENT.length, SENT.length); } catch (e) {} }
+resetInput();
+ti.addEventListener('compositionstart', () => composing = true);
+ti.addEventListener('compositionend', () => { composing = false; resetInput(); });
+ti.addEventListener('input', e => {
+  const v = ti.value;
+  if (e.inputType === 'insertLineBreak') { handleKey('Enter'); resetInput(); return; }
+  // parte in comune tra il valore precedente e quello nuovo
+  let i = 0;
+  while (i < v.length && i < prevVal.length && v[i] === prevVal[i]) i++;
+  for (let k = 0; k < prevVal.length - i; k++) handleKey('Backspace');
+  for (const ch of v.slice(i)) if (ch !== ' ') handleKey(ch);
+  prevVal = v;
+  if (!composing) resetInput();
+});
+
+function openKeyboard() {
+  if (document.activeElement !== ti) { ti.focus({ preventScroll: true }); resetInput(); }
+}
+// chiudere la tastiera durante la partita mette in pausa
+ti.addEventListener('blur', () => { if (TOUCH && state === 'play') state = 'pause'; });
+
+// tocco sul campo di gioco: apre la tastiera, avvia / continua
+canvas.addEventListener('pointerup', e => {
+  if (e.pointerType === 'mouse') {
+    if (state === 'title' || state === 'board' || state === 'over') handleKey('Enter');
+    return;
+  }
+  openKeyboard();
+  if (state === 'pause') handleKey('Escape');
   else if (state === 'title' || state === 'board' || state === 'over') handleKey('Enter');
 });
 
-// tastiera su schermo
-const keyEls = {};
-function flashKey(el) { el.classList.add('down'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('down'), 110); }
-(function buildKeyboard() {
-  const kb = document.getElementById('kb');
-  const rows = [
-    ['Q','W','E','R','T','Y','U','I','O','P'],
-    ['A','S','D','F','G','H','J','K','L'],
-    [['Backspace','⌫'],'Z','X','C','V','B','N','M',['Enter','INVIO']],
-  ];
-  rows.forEach(row => {
-    const div = document.createElement('div');
-    div.className = 'kb-row';
-    row.forEach(k => {
-      const [code, label] = Array.isArray(k) ? k : [k, k];
-      const b = document.createElement('div');
-      b.className = 'key' + (Array.isArray(k) ? ' wide' : '');
-      b.textContent = label;
-      b.addEventListener('pointerdown', e => { e.preventDefault(); flashKey(b); handleKey(code); });
-      keyEls[code] = b;
-      div.appendChild(b);
-    });
-    kb.appendChild(div);
-  });
-  resize();
-})();
+// quando la tastiera si apre, il gioco si restringe alla parte visibile dello schermo
+if (window.visualViewport) {
+  const fit = () => {
+    if (!TOUCH) return;
+    document.body.classList.add('kbfix');
+    document.body.style.height = visualViewport.height + 'px';
+    document.body.style.top = visualViewport.offsetTop + 'px';
+    resize();
+  };
+  visualViewport.addEventListener('resize', fit);
+  visualViewport.addEventListener('scroll', fit);
+  fit();
+}
 
 // ---------- Update ----------
 function update(dt) {
@@ -931,7 +935,7 @@ function blinkOn() { return Math.floor(performance.now() / 500) % 2 === 0; }
 
 function drawOverlay() {
   const s = uiS();
-  const START = TOUCH ? 'TOCCA O PREMI INVIO' : 'PREMI INVIO PER GIOCARE';
+  const START = TOUCH ? 'TOCCA LO SCHERMO PER GIOCARE' : 'PREMI INVIO PER GIOCARE';
   if (state === 'title') {
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, W, H);
     text('WORD', W / 2, H * 0.12, s * 3.6, '#7CF5C4');
@@ -955,9 +959,9 @@ function drawOverlay() {
     });
     const iy = py + ph + s * 4;
     text('BONUS: INDOVINA I 30 OGGETTI 🍎 ⚽ 🎸', W / 2, iy, s * 0.75, '#ffd23f');
-    text(TOUCH ? 'TOCCA LO SCHERMO = PAUSA   ⌫ = CAMBIA PAROLA' : 'BACKSPACE = CAMBIA PAROLA   ESC = PAUSA', W / 2, iy + s * 2, s * 0.7, '#ccc');
+    text(TOUCH ? 'CHIUDI LA TASTIERA = PAUSA   ⌫ = CAMBIA PAROLA' : 'BACKSPACE = CAMBIA PAROLA   ESC = PAUSA', W / 2, iy + s * 2, s * 0.7, '#ccc');
     if (blinkOn()) text(START, W / 2, iy + s * 4.6, s * 1.2, '#ff8fd8');
-    text('C = CLASSIFICA', W / 2, iy + s * 6.8, s * 0.75, '#ccc');
+    if (!TOUCH) text('C = CLASSIFICA', W / 2, iy + s * 6.8, s * 0.75, '#ccc');
   }
   if (state === 'pause') {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
