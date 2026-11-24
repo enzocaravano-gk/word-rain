@@ -573,17 +573,21 @@ function handleKey(k) {
   const ch = k.toUpperCase();
 
   if (!target) {
-    const cands = words.filter(w => w.y + w.h > 0 && matches(w, ch));
-    if (!cands.length) return miss();
-    // priorità a chi è nell'ultima occasione, poi a chi è più in basso
-    target = cands.reduce((a, b) => {
-      const pa = (a.grace !== null ? 1e5 : 0) + a.y, pb = (b.grace !== null ? 1e5 : 0) + b.y;
-      return pb > pa ? b : a;
-    });
-    target.buf = ch;
+    const t = pickTarget(ch, null);
+    if (!t) return miss();
+    target = t;
+    target.buf += ch;
     target.err = '';
   } else if (matches(target, target.buf + ch)) {
     // lettera giusta: si continua (e gli eventuali errori segnati in rosso spariscono)
+    target.buf += ch;
+    target.err = '';
+  } else if (pickTarget(ch, target, !!target.err)) {
+    // la lettera non va bene per questa parola ma va bene per un'altra (es. una che sta per
+    // scadere a terra): si passa a quella. La parola lasciata conserva le lettere già scritte.
+    // (se hai appena sbagliato una lettera, si salta solo verso parole a terra che stanno per scadere)
+    const t = pickTarget(ch, target, !!target.err);
+    target = t;
     target.buf += ch;
     target.err = '';
   } else {
@@ -596,6 +600,19 @@ function handleKey(k) {
   keysOk++;
   sfx.key();
   if (isComplete(target, target.buf)) destroyWord(target);
+}
+
+// sceglie la parola a cui va la lettera ch:
+// 1) chi è a terra nell'ultima occasione (prima chi ha meno secondi), 2) chi è già iniziata,
+// 3) la più in basso. Una parola già iniziata ma che non continua con ch può ripartire da capo.
+function pickTarget(ch, exclude, graceOnly = false) {
+  const visible = words.filter(w => w !== exclude && w.y + w.h > 0 && (!graceOnly || w.grace !== null));
+  const prio = w => (w.grace !== null ? 2e6 - w.grace * 1e4 : 0) + (w.buf ? 1e5 : 0) + w.y;
+  const best = list => list.length ? list.reduce((a, b) => (prio(b) > prio(a) ? b : a)) : null;
+  let t = best(visible.filter(w => matches(w, w.buf + ch)));
+  if (!t) { t = best(visible.filter(w => matches(w, ch))); if (t) t.buf = ''; }
+  if (t && exclude) exclude.err = '';
+  return t;
 }
 
 function miss() { keysBad++; sfx.error(); shake = Math.max(shake, 3); }
@@ -655,7 +672,22 @@ ti.addEventListener('blur', () => { if (TOUCH && state === 'play') state = 'paus
 canvas.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') e.preventDefault(); });
 canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
 // tocco sul campo di gioco: apre la tastiera, avvia / continua
+// parola sotto il dito / il mouse (con un po' di margine per le dita)
+function wordAt(px, py) {
+  const m = 12;
+  for (let i = words.length - 1; i >= 0; i--) {
+    const w = words[i];
+    if (px >= w.x - m && px <= w.x + w.w + m && py >= w.y - m && py <= w.y + w.h + m) return w;
+  }
+  return null;
+}
 canvas.addEventListener('pointerup', e => {
+  // durante la partita, toccare una parola la aggancia
+  if (state === 'play') {
+    const r = canvas.getBoundingClientRect();
+    const w = wordAt(e.clientX - r.left, e.clientY - r.top);
+    if (w && w !== target) { if (target) target.err = ''; target = w; w.hit = 0.15; sfx.key(); }
+  }
   if (e.pointerType === 'mouse') {
     if (state === 'title' || state === 'board' || state === 'over') handleKey('Enter');
     return;
