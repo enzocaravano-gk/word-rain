@@ -215,7 +215,12 @@ const stage = document.getElementById('stage');
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 let W, H, DPR, GROUND_H, PILL_H, FS, LFS, LPILL_H, ROWS, COMPACT;
+let lastSize = '';
 function resize() {
+  const size = stage.clientWidth + 'x' + stage.clientHeight + '@' + (window.devicePixelRatio || 1);
+  if (size === lastSize) return;            // niente lavoro (e niente sfarfallio) se le misure non cambiano
+  lastSize = size;
+  const oldGround = (H && GROUND_H) ? H - GROUND_H : 0, oldFS = FS;
   DPR = window.devicePixelRatio || 1;
   W = stage.clientWidth; H = stage.clientHeight;
   canvas.width = W * DPR; canvas.height = H * DPR;
@@ -228,6 +233,20 @@ function resize() {
   LPILL_H = Math.round(LFS * 2.4);
   ROWS = COMPACT ? 2 : 1;                                                  // righe disponibili al suolo
   GROUND_H = ROWS * (LPILL_H + 6) + 20;
+  if (oldGround && typeof words !== 'undefined') rescaleWorld(oldGround, oldFS);
+}
+// quando l'area di gioco cambia (es. si apre la tastiera) le parole restano alla stessa
+// distanza relativa dal suolo, invece di trovarsi di colpo sotto terra
+function rescaleWorld(oldGround, oldFS) {
+  const k = (H - GROUND_H) / oldGround;
+  for (const w of words) {
+    if (w.kind === 'word' && FS !== oldFS) { w.w = measure(w.text); w.h = PILL_H; }
+    if (w.kind === 'obj' && FS !== oldFS) { w.w = w.h = objR() * 2; }
+    w.speed *= k;
+    w.y = w.grace !== null ? groundY() - w.h - 4 : w.y * k;
+    w.x = Math.min(w.x, Math.max(4, W - w.w - 4));
+  }
+  for (const l of landed) l.y0 *= k;
 }
 addEventListener('resize', resize);
 if (window.visualViewport) visualViewport.addEventListener('resize', resize);
@@ -579,23 +598,37 @@ addEventListener('keydown', e => {
 
 // ---------- Tastiera del telefono ----------
 // Il campo invisibile contiene sempre due spazi: così anche il backspace viene rilevato.
+// Ogni modifica del campo viene confrontata con l'ultima già elaborata (prevVal):
+// in questo modo nessuna lettera viene contata due volte, anche con le tastiere che
+// "compongono" il testo (Gboard, Samsung, ecc.).
 const SENT = '  ';
 let prevVal = SENT, composing = false;
+const DEBUG = qs.has('debug');
+const debugLog = [];
+function dbg(msg) { if (DEBUG) { debugLog.push(msg); if (debugLog.length > 6) debugLog.shift(); } }
 function resetInput() { ti.value = SENT; prevVal = SENT; try { ti.setSelectionRange(SENT.length, SENT.length); } catch (e) {} }
 resetInput();
-ti.addEventListener('compositionstart', () => composing = true);
-ti.addEventListener('compositionend', () => { composing = false; resetInput(); });
-ti.addEventListener('input', e => {
+function processInput() {
   const v = ti.value;
-  if (e.inputType === 'insertLineBreak') { handleKey('Enter'); resetInput(); return; }
-  // parte in comune tra il valore precedente e quello nuovo
+  if (v === prevVal) return;
   let i = 0;
   while (i < v.length && i < prevVal.length && v[i] === prevVal[i]) i++;
-  for (let k = 0; k < prevVal.length - i; k++) handleKey('Backspace');
-  for (const ch of v.slice(i)) if (ch !== ' ') handleKey(ch);
+  const removed = prevVal.length - i, added = v.slice(i).replace(/[^a-zA-Z]/g, '');
+  if (removed > 0 && !added) handleKey('Backspace');           // cancellazione vera
+  for (const ch of added) handleKey(ch);                        // lettere nuove (anche se la tastiera ha riscritto il testo)
   prevVal = v;
-  if (!composing) resetInput();
+}
+ti.addEventListener('compositionstart', () => { composing = true; dbg('comp start'); });
+ti.addEventListener('compositionend', () => { composing = false; processInput(); resetInput(); dbg('comp end'); });
+ti.addEventListener('input', e => {
+  dbg(`${e.inputType || 'input'} "${e.data || ''}" ${e.isComposing ? 'C' : ''}`);
+  if (e.inputType === 'insertLineBreak') { handleKey('Enter'); resetInput(); return; }
+  processInput();
+  // si azzera il campo solo quando la tastiera non sta componendo, altrimenti si confonde
+  if (!composing && !e.isComposing) resetInput();
+  else if (ti.value.length > 40) { ti.blur(); ti.focus({ preventScroll: true }); resetInput(); }
 });
+ti.addEventListener('keydown', e => dbg(`key ${e.key} ${e.keyCode}`));
 
 function openKeyboard() {
   if (document.activeElement !== ti) { ti.focus({ preventScroll: true }); resetInput(); }
@@ -603,6 +636,9 @@ function openKeyboard() {
 // chiudere la tastiera durante la partita mette in pausa
 ti.addEventListener('blur', () => { if (TOUCH && state === 'play') state = 'pause'; });
 
+// toccare il gioco non deve togliere il focus al campo (altrimenti la tastiera si chiude e riapre)
+canvas.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') e.preventDefault(); });
+canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
 // tocco sul campo di gioco: apre la tastiera, avvia / continua
 canvas.addEventListener('pointerup', e => {
   if (e.pointerType === 'mouse') {
@@ -619,8 +655,9 @@ if (window.visualViewport) {
   const fit = () => {
     if (!TOUCH) return;
     document.body.classList.add('kbfix');
-    document.body.style.height = visualViewport.height + 'px';
-    document.body.style.top = visualViewport.offsetTop + 'px';
+    const h = Math.round(visualViewport.height) + 'px', t = Math.round(visualViewport.offsetTop) + 'px';
+    if (document.body.style.height !== h) document.body.style.height = h;
+    if (document.body.style.top !== t) document.body.style.top = t;
     resize();
   };
   visualViewport.addEventListener('resize', fit);
@@ -1028,6 +1065,12 @@ function draw(time) {
   if (state === 'play' || state === 'pause' || state === 'over') { drawHUD(); drawBanner(); }
   ctx.restore();
   drawOverlay();
+  if (DEBUG) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, H - 110, W, 110);
+    ctx.fillStyle = '#0f0'; ctx.font = '12px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    debugLog.forEach((l, i) => ctx.fillText(l, 6, H - 104 + i * 16));
+    ctx.fillText(`campo="${ti.value}" target=${target ? target.buf : '-'} focus=${document.activeElement === ti}`, 6, H - 104 + 6 * 16);
+  }
 }
 
 let last = performance.now();
