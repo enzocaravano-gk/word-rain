@@ -561,7 +561,14 @@ function handleKey(k) {
   if (state !== 'play') return;
 
   if (k === 'Escape') { state = 'pause'; return; }
-  if (k === 'Backspace') { if (target) { target.buf = ''; target = null; } return; }
+  if (k === 'Backspace') {
+    // cancella prima le lettere sbagliate, poi quelle giuste; a parola vuota la sgancia
+    if (target) {
+      if (target.err) target.err = target.err.slice(0, -1);
+      else { target.buf = target.buf.slice(0, -1); if (!target.buf) target = null; }
+    }
+    return;
+  }
   if (!/^[a-zA-Z]$/.test(k)) return;
   const ch = k.toUpperCase();
 
@@ -574,9 +581,15 @@ function handleKey(k) {
       return pb > pa ? b : a;
     });
     target.buf = ch;
+    target.err = '';
   } else if (matches(target, target.buf + ch)) {
+    // lettera giusta: si continua (e gli eventuali errori segnati in rosso spariscono)
     target.buf += ch;
+    target.err = '';
   } else {
+    // lettera sbagliata: resta visibile in rosso finché non la cancelli o scrivi quella giusta
+    const room = Math.max(0, target.text.length - target.buf.length);
+    if ((target.err || '').length < Math.min(3, room)) target.err = (target.err || '') + ch;
     target.hit = 0.25;
     return miss();
   }
@@ -584,6 +597,8 @@ function handleKey(k) {
   sfx.key();
   if (isComplete(target, target.buf)) destroyWord(target);
 }
+
+function miss() { keysBad++; sfx.error(); shake = Math.max(shake, 3); }
 
 const ti = document.getElementById('ti');
 
@@ -614,7 +629,7 @@ function processInput() {
   let i = 0;
   while (i < v.length && i < prevVal.length && v[i] === prevVal[i]) i++;
   const removed = prevVal.length - i, added = v.slice(i).replace(/[^a-zA-Z]/g, '');
-  if (removed > 0 && !added) handleKey('Backspace');           // cancellazione vera
+  if (removed > 0 && !added) for (let r = 0; r < removed; r++) handleKey('Backspace');   // cancellazione vera
   for (const ch of added) handleKey(ch);                        // lettere nuove (anche se la tastiera ha riscritto il testo)
   prevVal = v;
 }
@@ -789,7 +804,7 @@ function roundRect(x, y, w, h, rad) {
 function shade(hex, f) { return rgb(hex2rgb(hex).map(v => Math.max(0, Math.min(255, v * f)))); }
 
 function drawPill(x, y, w, str, color, opt = {}) {
-  const { typed = 0, isTarget = false, dim = false, hit = 0, fs = FS, h = PILL_H, alarm = 0 } = opt;
+  const { typed = 0, isTarget = false, dim = false, hit = 0, fs = FS, h = PILL_H, alarm = 0, err = '' } = opt;
   if (hit > 0) x += Math.sin(hit * 80) * 4;
   ctx.save();
   ctx.shadowColor = alarm ? '#ff2a2a' : (isTarget ? '#ffffff' : color);
@@ -807,11 +822,17 @@ function drawPill(x, y, w, str, color, opt = {}) {
   ctx.stroke();
 
   const tx = x + fs, ty = y + h / 2;
-  const done = str.slice(0, typed), rest = str.slice(typed);
+  const done = str.slice(0, typed), rest = str.slice(typed + err.length);
   const dw = done ? textW(done, fs) + fs / 7 : 0;
+  const ew = err ? textW(err, fs) + fs / 7 : 0;
   if (done) blitStr(done, tx, ty - fs / 2, fs, 'rgba(0,0,0,0.28)', false);
-  if (rest) blitStr(rest, tx + dw, ty - fs / 2, fs, dim ? '#333' : '#111', false);
-  if (isTarget && rest.length) {
+  if (err) {
+    ctx.fillStyle = '#d81b1b';
+    ctx.fillRect(tx + dw - fs * 0.12, ty - fs * 0.75, ew + fs * 0.1, fs * 1.5);
+    blitStr(err, tx + dw, ty - fs / 2, fs, '#ffffff', false);
+  }
+  if (rest) blitStr(rest, tx + dw + ew, ty - fs / 2, fs, dim ? '#333' : '#111', false);
+  if (isTarget && rest.length && !err) {
     ctx.fillStyle = '#111';
     ctx.fillRect(tx + dw, ty + fs * 0.65, textW(rest[0], fs), 3);
   }
@@ -829,7 +850,7 @@ function drawWord(w) {
     x += isT ? 0 : Math.sin(w.wobble) * 2;
   }
   x = Math.min(x, W - w.w - FS * 1.3);   // spazio per il contatore
-  drawPill(x, w.y, w.w, w.text, w.color, { typed: w.buf.length, isTarget: isT, hit: w.hit, alarm });
+  drawPill(x, w.y, w.w, w.text, w.color, { typed: w.buf.length, isTarget: isT, hit: w.hit, alarm, err: isT ? (w.err || '') : '' });
   if (w.grace !== null) {
     const cx = x + w.w + FS * 0.2, cy = w.y, rr = FS * 1.1;
     ctx.fillStyle = '#d81b1b';
@@ -860,9 +881,9 @@ function drawObject(o) {
   ctx.fillText(o.emoji, 0, 0);
   ctx.restore();
   if (isT && o.buf) {
-    const fs = Math.round(FS * 0.8), str = o.buf + '_', pw = measure(str, fs);
+    const fs = Math.round(FS * 0.8), str = o.buf + (o.err || '') + '_', pw = measure(str, fs);
     const px = Math.max(4, Math.min(W - pw - 4, cx - pw / 2));
-    drawPill(px, o.y + R * 2 + 6, pw, str, o.color, { typed: o.buf.length, fs, h: Math.round(fs * 2.4) });
+    drawPill(px, o.y + R * 2 + 6, pw, str, o.color, { typed: o.buf.length, err: o.err || '', fs, h: Math.round(fs * 2.4) });
   }
 }
 
@@ -882,6 +903,7 @@ function hudBox(x, y, w, h, border) {
 }
 
 function drawHUD() {
+  if (COMPACT || H < 620) return drawHUDSmall();
   const s = FS;
   const pad = COMPACT ? 10 : 18;
   // --- punteggio (sinistra) e record (destra), stessi riquadri grandi ---
@@ -935,6 +957,44 @@ function drawHUD() {
   // --- misuratore del terreno ---
   const fill = groundFill();
   const gy = groundY();
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, gy - 6, W, 6);
+  ctx.fillStyle = fill > 0.7 ? (Math.sin(performance.now() / 90) > 0 ? '#ff3b3b' : '#ffb347') : (fill > 0.4 ? '#ffb347' : '#7CF5C4');
+  ctx.fillRect(0, gy - 6, W * fill, 6);
+}
+
+// HUD per schermi piccoli: una sola striscia sottile in alto, così le parole si vedono subito
+function hudLevel() {
+  if (mode === 'bonus') return { label: `BONUS ${bonusCount} ${bonusCaught}/${bonusTotal}`, prog: bonusDone / bonusTotal, color: '#ffd23f' };
+  return { label: `LIVELLO ${level}-${sub}`, prog: cleared / quota(), color: '#7CF5C4' };
+}
+function drawHUDSmall() {
+  const pad = 6, n = Math.min(13, W / 29), lab = 7, hudH = pad * 2 + lab + n + 4;
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(0, 0, W, hudH);
+  text('PUNTI', pad, pad + lab / 2, lab, '#ffe066', 'left', false);
+  ctx.save();
+  const sc = 1 + scorePop * 0.25;
+  ctx.translate(pad, pad + lab + 4 + n / 2);
+  ctx.scale(sc, sc);
+  text(String(Math.floor(displayScore)).padStart(6, '0'), 0, 0, n, '#ffffff', 'left');
+  ctx.restore();
+  const best = highscores.length ? Math.max(highscores[0].score, score) : score;
+  text('RECORD', W - pad, pad + lab / 2, lab, '#ff8fd8', 'right', false);
+  text(String(best).padStart(6, '0'), W - pad, pad + lab + 4 + n / 2, n, '#ffffff', 'right');
+  const side = textW('000000', n) * 1.25 + pad * 3;   // spazio anche per l'animazione del punteggio
+  const barW = Math.max(60, W - side * 2), barX = W / 2 - barW / 2, barH = 8;
+  const { label, prog, color } = hudLevel();
+  text(label, W / 2, pad + 5, Math.min(10, barW / (label.length * 0.86)), mode === 'bonus' ? '#ffd23f' : '#ffffff', 'center', false);
+  const barY = pad + 13;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  roundRect(barX, barY, barW, barH, barH / 2); ctx.fill();
+  if (prog > 0) { ctx.fillStyle = color; roundRect(barX, barY, Math.max(barH, barW * prog), barH, barH / 2); ctx.fill(); }
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+  roundRect(barX, barY, barW, barH, barH / 2); ctx.stroke();
+  drawGroundMeter();
+}
+function drawGroundMeter() {
+  const fill = groundFill(), gy = groundY();
   ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, gy - 6, W, 6);
   ctx.fillStyle = fill > 0.7 ? (Math.sin(performance.now() / 90) > 0 ? '#ff3b3b' : '#ffb347') : (fill > 0.4 ? '#ffb347' : '#7CF5C4');
   ctx.fillRect(0, gy - 6, W * fill, 6);
