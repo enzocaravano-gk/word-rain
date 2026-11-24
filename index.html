@@ -41,7 +41,8 @@ const HS_MAX = 10;
 const SUBLEVELS = 4;
 const GRACE = 4;            // secondi di "ultima occasione" a terra
 const BONUS_POINTS = 20;    // punti per ogni oggetto nel livello bonus
-const BONUS_PERFECT = 300;  // premio se si prendono tutti gli oggetti
+const BONUS_PERFECT = 300;
+const BOUNCE = 1;           // secondi di rimbalzo degli oggetti bonus a terra  // premio se si prendono tutti gli oggetti
 
 // Dispositivo touch → si usa la tastiera del telefono (forzabile con ?touch=1 / ?touch=0)
 const qs = new URLSearchParams(location.search);
@@ -606,8 +607,10 @@ function handleKey(k) {
 // 1) chi è a terra nell'ultima occasione (prima chi ha meno secondi), 2) chi è già iniziata,
 // 3) la più in basso. Una parola già iniziata ma che non continua con ch può ripartire da capo.
 function pickTarget(ch, exclude, graceOnly = false) {
-  const visible = words.filter(w => w !== exclude && w.y + w.h > 0 && (!graceOnly || w.grace !== null));
-  const prio = w => (w.grace !== null ? 2e6 - w.grace * 1e4 : 0) + (w.buf ? 1e5 : 0) + w.y;
+  const urgent = w => w.grace !== null || w.bounce != null;
+  const left = w => w.grace !== null ? w.grace : w.bounce;
+  const visible = words.filter(w => w !== exclude && w.y + w.h > 0 && (!graceOnly || urgent(w)));
+  const prio = w => (urgent(w) ? 2e6 - left(w) * 1e4 : 0) + (w.buf ? 1e5 : 0) + w.y;
   const best = list => list.length ? list.reduce((a, b) => (prio(b) > prio(a) ? b : a)) : null;
   let t = best(visible.filter(w => matches(w, w.buf + ch)));
   if (!t) { t = best(visible.filter(w => matches(w, ch))); if (t) t.buf = ''; }
@@ -754,10 +757,26 @@ function update(dt) {
       if (w.grace <= 0) { landWord(w); if (state !== 'play') return; }
       continue;
     }
+    if (w.bounce != null) {
+      // oggetto bonus a terra: rimbalza per 1 secondo, ultima occasione per scriverlo
+      const g = 2600 * (H / 720);
+      w.bounce -= dt;
+      w.vy += g * dt;
+      w.y += w.vy * dt;
+      w.wobble += dt * 6;
+      if (w.y + w.h >= gy) { w.y = gy - w.h; w.vy = -Math.abs(w.vy) * 0.6; if (Math.abs(w.vy) > 120) sfx.pop(); }
+      if (w.bounce <= 0) dropObject(w);
+      continue;
+    }
     w.y += w.speed * dt;
     w.wobble += dt * 2;
     if (w.y + w.h >= gy) {
-      if (w.kind === 'obj') dropObject(w);
+      if (w.kind === 'obj') {
+        w.y = gy - w.h;
+        w.bounce = BOUNCE;
+        w.vy = -Math.sqrt(2 * 2600 * (H / 720) * Math.max(40, H * 0.12));   // primo balzo ~12% dello schermo
+        sfx.pop();
+      }
       else startGrace(w);
     }
   }
@@ -900,6 +919,7 @@ function drawObject(o) {
   ctx.save();
   ctx.shadowColor = isT ? '#fff' : o.color;
   ctx.shadowBlur = isT ? 26 : 14;
+  if (o.bounce != null) { ctx.shadowColor = '#ff2a2a'; ctx.shadowBlur = 18 + 14 * Math.sin(performance.now() / 50); }
   ctx.fillStyle = 'rgba(255,255,255,0.9)';
   ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.28); ctx.fill();
   ctx.shadowBlur = 0;
