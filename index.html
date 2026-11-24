@@ -558,10 +558,10 @@ function handleKey(k) {
     }
     return;
   }
-  if (state === 'pause') { if (k === 'Escape' || k === 'Enter') state = 'play'; return; }
+  if (state === 'pause') { if (k === 'Escape' || k === 'Enter' || k === ' ') state = 'play'; return; }
   if (state !== 'play') return;
 
-  if (k === 'Escape') { state = 'pause'; return; }
+  if (k === 'Escape' || k === ' ') { state = 'pause'; return; }   // ESC o barra spaziatrice = pausa
   if (k === 'Backspace') {
     // cancella prima le lettere sbagliate, poi quelle giuste; a parola vuota la sgancia
     if (target) {
@@ -648,9 +648,9 @@ function processInput() {
   if (v === prevVal) return;
   let i = 0;
   while (i < v.length && i < prevVal.length && v[i] === prevVal[i]) i++;
-  const removed = prevVal.length - i, added = v.slice(i).replace(/[^a-zA-Z]/g, '');
+  const removed = prevVal.length - i, added = v.slice(i).replace(/[^a-zA-Z ]/g, '');
   if (removed > 0 && !added) for (let r = 0; r < removed; r++) handleKey('Backspace');   // cancellazione vera
-  for (const ch of added) handleKey(ch);                        // lettere nuove (anche se la tastiera ha riscritto il testo)
+  for (const ch of added) handleKey(ch);                        // lettere nuove e spazio (pausa)
   prevVal = v;
 }
 ti.addEventListener('compositionstart', () => { composing = true; dbg('comp start'); });
@@ -1108,14 +1108,14 @@ function drawOverlay() {
     });
     const iy = py + ph + s * 4;
     text('BONUS: INDOVINA I 30 OGGETTI 🍎 ⚽ 🎸', W / 2, iy, s * 0.75, '#ffd23f');
-    text(TOUCH ? 'CHIUDI LA TASTIERA = PAUSA   ⌫ = CAMBIA PAROLA' : 'BACKSPACE = CAMBIA PAROLA   ESC = PAUSA', W / 2, iy + s * 2, s * 0.7, '#ccc');
+    text(TOUCH ? 'SPAZIO = PAUSA   ⌫ = CORREGGI' : 'SPAZIO = PAUSA   BACKSPACE = CORREGGI', W / 2, iy + s * 2, s * 0.7, '#ccc');
     if (blinkOn()) text(START, W / 2, iy + s * 4.6, s * 1.2, '#ff8fd8');
     if (!TOUCH) text('C = CLASSIFICA', W / 2, iy + s * 6.8, s * 0.75, '#ccc');
   }
   if (state === 'pause') {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
     text('PAUSA', W / 2, H * 0.42, s * 3, '#ffe066');
-    if (blinkOn()) text(TOUCH ? 'TOCCA PER CONTINUARE' : 'ESC PER CONTINUARE', W / 2, H * 0.42 + s * 4, s, '#fff');
+    if (blinkOn()) text(TOUCH ? 'SPAZIO O TOCCA PER CONTINUARE' : 'SPAZIO PER CONTINUARE', W / 2, H * 0.42 + s * 4, s, '#fff');
   }
   if (state === 'over') {
     ctx.fillStyle = `rgba(0,0,0,${Math.min(0.7, overTimer)})`; ctx.fillRect(0, 0, W, H);
