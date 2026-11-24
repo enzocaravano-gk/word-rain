@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
-<title>Pioggia di Parole</title>
+<title>Word Rain</title>
 <style>
   html, body {
     margin: 0; padding: 0; overflow: hidden; background: #000;
@@ -47,7 +47,7 @@
 <div id="kb"></div>
 <script>
 // =====================================================================
-//  PIOGGIA DI PAROLE — gioco di digitazione
+//  WORD RAIN — gioco di digitazione
 // =====================================================================
 
 const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
@@ -934,8 +934,8 @@ function drawOverlay() {
   const START = TOUCH ? 'TOCCA O PREMI INVIO' : 'PREMI INVIO PER GIOCARE';
   if (state === 'title') {
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, W, H);
-    text('PIOGGIA', W / 2, H * 0.12, s * 3.6, '#7CF5C4');
-    text('DI PAROLE', W / 2, H * 0.12 + s * 4.6, s * 3.6, '#ffe066');
+    text('WORD', W / 2, H * 0.12, s * 3.6, '#7CF5C4');
+    text('RAIN', W / 2, H * 0.12 + s * 4.6, s * 3.6, '#ffe066');
     const y = H * 0.12 + s * 9;
     text('SCRIVI LE PAROLE PRIMA CHE TOCCHINO TERRA', W / 2, y, s * 0.75, '#fff');
     text('A TERRA HAI 4 SECONDI PER SALVARLE', W / 2, y + s * 1.8, s * 0.75, '#ff8a8a');

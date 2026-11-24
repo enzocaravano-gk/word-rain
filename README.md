@@ -1,4 +1,4 @@
-# Word Rain — Pioggia di Parole
+# Word Rain
 
 Gioco di digitazione in stile retro: le parole cadono dall'alto dentro pillole colorate e vanno scritte prima che tocchino terra.
 
