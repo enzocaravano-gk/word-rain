@@ -232,7 +232,7 @@ function resize() {
   PILL_H = Math.round(FS * 2.3);
   LFS = Math.max(10, Math.round(FS * 0.6));                                // font parole a terra
   LPILL_H = Math.round(LFS * 2.4);
-  ROWS = COMPACT ? 2 : 1;                                                  // righe disponibili al suolo
+  ROWS = 1;                                                                // una sola fila al suolo, anche su telefono
   GROUND_H = ROWS * (LPILL_H + 6) + 20;
   if (oldGround && typeof words !== 'undefined') rescaleWorld(oldGround, oldFS);
 }
