@@ -333,6 +333,35 @@ function saveHS(list) { try { localStorage.setItem(HS_KEY, JSON.stringify(list))
 let highscores = loadHS();
 const qualifies = s => s > 0 && (highscores.length < HS_MAX || s > highscores[highscores.length - 1].score);
 
+
+// ---------- difficoltà: Principiante / Intermedio / Master ----------
+const DIFFS = [
+  { key: 'P', name: 'PRINCIPIANTE', start: 1, mult: 1, speed: 0.85 },   // un po' più lento
+  { key: 'I', name: 'INTERMEDIO', start: 3, mult: 1.5, speed: 1 },
+  { key: 'M', name: 'MASTER', start: 5, mult: 2, speed: 1 },
+];
+const DIFF_KEY = HS_KEY + '_difficolta';
+let diffIdx = (() => { try { const v = localStorage.getItem(DIFF_KEY); return v === null ? 0 : Math.max(0, Math.min(2, +v)); } catch (e) { return 0; } })();
+const diff = () => DIFFS[diffIdx];
+function setDiff(i) { diffIdx = i; try { localStorage.setItem(DIFF_KEY, String(i)); } catch (e) {} }
+const withDiff = p => Math.round(p * diff().mult);      // punti moltiplicati per la difficoltà
+let diffRects = [];
+function drawDiffButtons(y, s) {
+  const bw = Math.min(170, (W - 40) / 3), bh = s * 2.2, gap = 8, x0 = W / 2 - (bw * 3 + gap * 2) / 2;
+  diffRects = DIFFS.map((d, i) => ({ x: x0 + i * (bw + gap), y: y - bh / 2, w: bw, h: bh, i }));
+  for (const r of diffRects) {
+    const d = DIFFS[r.i], sel = r.i === diffIdx;
+    ctx.fillStyle = sel ? '#ffe066' : 'rgba(0,0,0,0.45)';
+    roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill();
+    ctx.strokeStyle = sel ? '#ffffff' : 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2; ctx.stroke();
+    const fs = Math.min(s * 0.7, (r.w - 12) / (d.name.length * 0.86));
+    text(d.name, r.x + r.w / 2, r.y + r.h / 2 + 1, fs, sel ? '#3a2500' : '#ffffff', 'center', false);
+  }
+  const d = diff();
+  text(`PARTI DAL LIVELLO ${d.start} - PUNTI X${String(d.mult).replace('.', ',')}`, W / 2, y + bh / 2 + s * 1.1, s * 0.6, '#ffe066');
+}
+const diffAt = (px, py) => { const r = diffRects.find(r => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h); return r ? r.i : -1; };
+
 // ---------- Stato di gioco ----------
 let state = 'title'; // title | play | pause | over | initials | board
 let mode = 'normal'; // normal | bonus
@@ -344,8 +373,8 @@ let scorePop = 0, displayScore = 0;
 
 function quota() { return 8 + level * 2; }
 // velocità di partenza alzata: al livello 1 una parola attraversa lo schermo in circa 16 secondi (prima 25)
-function fallSpeed() { return (H / 720) * (44 + (level - 1) * 14 + (sub - 1) * 4); }
-function spawnInterval() { return Math.max(0.55, 1.8 - (level - 1) * 0.24 - (sub - 1) * 0.06) * (COMPACT ? 1.25 : 1); }
+function fallSpeed() { return (H / 720) * (44 + (level - 1) * 14 + (sub - 1) * 4) * diff().speed; }
+function spawnInterval() { return Math.max(0.55, 1.8 - (level - 1) * 0.24 - (sub - 1) * 0.06) * (COMPACT ? 1.25 : 1) / diff().speed; }
 function bonusSpeed() { return (H / 720) * (95 + (bonusCount - 1) * 28); }
 function bonusInterval() { return Math.max(0.4, 1.15 - (bonusCount - 1) * 0.12) * (COMPACT ? 1.2 : 1); }
 function catWeights() {
@@ -358,7 +387,8 @@ function newGame() {
   target = null; score = 0; displayScore = 0; level = 1; sub = 1; cleared = 0;
   spawnTimer = 0.5; keysOk = 0; keysBad = 0; wordsDone = 0; shake = 0;
   mode = 'normal'; bonusCount = 0;
-  banner = { text: 'LIVELLO 1-1', sub: THEMES[0].name, t: 2.2 };
+  level = diff().start;
+  banner = { text: `LIVELLO ${level}-1`, sub: `${diff().name} - ${THEMES[0].name}`, t: 2.4 };
   state = 'play';
   sfx.carriage();
 }
@@ -465,8 +495,8 @@ function endBonus() {
   level++; sub = 1; cleared = 0;
   let msg = `PRESI ${bonusCaught}/${bonusTotal}`;
   if (bonusCaught === bonusTotal) {
-    score += BONUS_PERFECT; scorePop = 1;
-    msg = `PERFETTO! +${BONUS_PERFECT}`;
+    score += withDiff(BONUS_PERFECT); scorePop = 1;
+    msg = `PERFETTO! +${withDiff(BONUS_PERFECT)}`;
   }
   banner = { text: `LIVELLO ${level}-1`, sub: msg, t: 3 };
   spawnTimer = 2;
@@ -528,7 +558,7 @@ function dropObject(o) {
 function destroyWord(wd) {
   words.splice(words.indexOf(wd), 1);
   target = null;
-  const pts = wd.kind === 'obj' ? BONUS_POINTS : POINTS[wd.cat];
+  const pts = withDiff(wd.kind === 'obj' ? BONUS_POINTS : POINTS[wd.cat]);
   score += pts; scorePop = 1; wordsDone++;
   sfx.bell(wd.cat);
   const cx = wd.x + wd.w / 2, cy = wd.y + wd.h / 2;
@@ -564,6 +594,7 @@ const matches = (w, buf) => w.names.some(n => n.startsWith(buf));
 const isComplete = (w, buf) => w.names.includes(buf);
 
 function handleKey(k) {
+  if (state === 'title' && k >= '1' && k <= '3') { setDiff(+k - 1); return; }
   if (state === 'title' || state === 'board') {
     if (k === 'Enter') newGame();
     if (state === 'title' && (k === 'c' || k === 'C')) state = 'board';
@@ -582,7 +613,7 @@ function handleKey(k) {
     if (/^[a-zA-Z0-9]$/.test(k) && initials.length < 3) { initials += k.toUpperCase(); sfx.key(); }
     else if (k === 'Backspace') initials = initials.slice(0, -1);
     else if (k === 'Enter' && initials.length === 3) {
-      const entry = { name: initials, score, level: `${level}-${sub}`, date: Date.now() };
+      const entry = { name: initials, score, level: `${level}-${sub}`, diff: diff().key, date: Date.now() };
       highscores.push(entry);
       highscores.sort((a, b) => b.score - a.score);
       highscores = highscores.slice(0, HS_MAX);
@@ -729,6 +760,10 @@ canvas.addEventListener('pointerup', e => {
     const r = canvas.getBoundingClientRect();
     const w = wordAt(e.clientX - r.left, e.clientY - r.top);
     if (w && w !== target) { if (target) target.err = ''; target = w; w.hit = 0.15; sfx.key(); }
+  }
+  if (state === 'title') {
+    const r1 = canvas.getBoundingClientRect(), di = diffAt(e.clientX - r1.left, e.clientY - r1.top);
+    if (di >= 0) { setDiff(di); return; }
   }
   if (e.pointerType === 'mouse') {
     if (state === 'title' || state === 'board' || state === 'over') handleKey('Enter');
@@ -1141,7 +1176,7 @@ function drawLeaderboard(y0) {
     const blink = i === lastEntryIdx && Math.sin(performance.now() / 120) > 0;
     const c = blink ? '#7CF5C4' : (colors[i] || '#ffffff');
     text(`${String(i + 1).padStart(2, ' ')}.`, W / 2 - s * 12, y, s, c, 'left');
-    text(h.name, W / 2 - s * 8, y, s, c, 'left');
+    text(`${h.name} ${h.diff || 'P'}`, W / 2 - s * 8, y, s, c, 'left');
     text(String(h.score).padStart(6, '0'), W / 2 + s * 0.5, y, s, c, 'left');
     text(`L${h.level}`, W / 2 + s * 12, y, s * 0.8, c, 'right');
   });
@@ -1176,8 +1211,9 @@ function drawOverlay() {
     const iy = py + ph + s * 4;
     text('BONUS: INDOVINA I 30 OGGETTI 🍎 ⚽ 🎸', W / 2, iy, s * 0.75, '#ffd23f');
     text(TOUCH ? 'SPAZIO = PAUSA   ⌫ = CORREGGI' : 'SPAZIO = PAUSA   BACKSPACE = CORREGGI', W / 2, iy + s * 2, s * 0.7, '#ccc');
-    if (blinkOn()) text(START, W / 2, iy + s * 4.6, s * 1.2, '#ff8fd8');
-    if (!TOUCH) text('C = CLASSIFICA', W / 2, iy + s * 6.8, s * 0.75, '#ccc');
+    drawDiffButtons(iy + s * 4.6, s);
+    if (blinkOn()) text(START, W / 2, iy + s * 8.4, s * 1.2, '#ff8fd8');
+    if (!TOUCH) text('C = CLASSIFICA   1 2 3 = DIFFICOLTA', W / 2, iy + s * 10.4, s * 0.7, '#ccc');
   }
   if (state === 'pause') {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
