@@ -720,6 +720,10 @@ function wordAt(px, py) {
   return null;
 }
 canvas.addEventListener('pointerup', e => {
+  // pulsante pausa
+  { const r0 = canvas.getBoundingClientRect();
+    if ((state === 'play' || state === 'pause') && onPauseBtn(e.clientX - r0.left, e.clientY - r0.top)) { handleKey('Escape'); if (e.pointerType !== 'mouse' && state === 'play') openKeyboard(); return; } }
+  if (state === 'pause' && e.pointerType === 'mouse') { handleKey('Escape'); return; }
   // durante la partita, toccare una parola la aggancia
   if (state === 'play') {
     const r = canvas.getBoundingClientRect();
@@ -1089,6 +1093,25 @@ function drawHUDSmall() {
   roundRect(barX, barY, barW, barH, barH / 2); ctx.stroke();
   drawGroundMeter();
 }
+
+// ---------- pulsante pausa (in alto a destra, sotto i punteggi) ----------
+function pauseBtn() {
+  const top = (COMPACT || H < 620) ? 36 : 18 + FS * 2.1 + Math.max(9, FS * 2.1 * 0.34) + 26;
+  return { x: W - 26, y: top + 26, r: 18 };
+}
+const onPauseBtn = (px, py) => { const b = pauseBtn(); return Math.hypot(px - b.x, py - b.y) <= b.r + 12; };
+function drawPauseBtn() {
+  if (state !== 'play' && state !== 'pause') return;
+  const b = pauseBtn();
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.28); ctx.fill();
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  if (state === 'pause') { ctx.beginPath(); ctx.moveTo(b.x - 5, b.y - 8); ctx.lineTo(b.x + 8, b.y); ctx.lineTo(b.x - 5, b.y + 8); ctx.fill(); }
+  else { ctx.fillRect(b.x - 7, b.y - 8, 5, 16); ctx.fillRect(b.x + 2, b.y - 8, 5, 16); }
+  ctx.restore();
+}
+
 function drawGroundMeter() {
   const fill = groundFill(), gy = groundY();
   ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, gy - 6, W, 6);
@@ -1221,6 +1244,7 @@ function draw(time) {
   if (state === 'play' || state === 'pause' || state === 'over') { drawHUD(); drawBanner(); }
   ctx.restore();
   drawOverlay();
+  drawPauseBtn();
   if (DEBUG) {
     ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, H - 110, W, 110);
     ctx.fillStyle = '#0f0'; ctx.font = '12px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
