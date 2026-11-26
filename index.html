@@ -500,8 +500,18 @@ function startGrace(wd) {
 function landWord(wd) {
   if (target === wd) target = null;
   words.splice(words.indexOf(wd), 1);
-  landed.push({ text: wd.text, w: measure(wd.text, LFS), color: wd.color, x: wd.x, y0: wd.y, t: 0 });
-  shake = 10;
+  landed.push({ text: wd.text, w: measure(wd.text, LFS), color: wd.special ? '#e0c3ff' : wd.color, x: wd.x, y0: wd.y, t: 0 });
+  if (wd.special) {
+    // arcobaleno non scritta: si apre a terra e le sue 2 parole occupano altri posti nella fila
+    for (let i = 0; i < 2; i++) {
+      const { text, cat } = pickWord(0);
+      landed.push({ text, w: measure(text, LFS), color: PILL_COLORS[cat][i], x: wd.x, y0: wd.y, t: 0 });
+    }
+    const cx = wd.x + wd.w / 2;
+    for (let i = 0; i < 24; i++) burst(cx, wd.y + wd.h / 2, `hsl(${i * 15},90%,65%)`, 1, 260);
+    floaters.push({ x: cx, y: wd.y - 10, text: '+2 A TERRA!', t: 1.3, color: '#ff5050' });
+    shake = 16;
+  } else shake = 10;
   sfx.land();
   if (landedLayout().rowsUsed > ROWS) gameOver();
 }

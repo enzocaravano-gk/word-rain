@@ -3,7 +3,7 @@
 Gioco di digitazione in stile retro: le parole cadono dall'alto dentro pillole colorate e vanno scritte prima che tocchino terra.
 
 - Parole piccole 5 punti, medie 10, grandi 15
-- Pillole arcobaleno: quando scrivi la loro parola si aprono in 2 parole corte nello stesso punto
+- Pillole arcobaleno: quando scrivi la loro parola si aprono in 2 parole corte nello stesso punto; se cadono a terra senza essere scritte occupano 3 posti nella fila
 - A terra hai 4 secondi di ultima occasione; poi la parola finisce nella fila al suolo. Se la fila si riempie, hai perso
 - Ogni livello ha 4 sottolivelli: giorno, tramonto, crepuscolo, notte
 - Dopo ogni livello c'è un bonus con 30 oggetti da indovinare
