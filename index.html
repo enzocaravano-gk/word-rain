@@ -341,8 +341,9 @@ let bonusCount = 0, bonusQueue = [], bonusTotal = 0, bonusCaught = 0, bonusDone 
 let scorePop = 0, displayScore = 0;
 
 function quota() { return 8 + level * 2; }
-function fallSpeed() { return (H / 720) * (28 + (level - 1) * 14 + (sub - 1) * 4); }
-function spawnInterval() { return Math.max(0.55, 2.3 - (level - 1) * 0.28 - (sub - 1) * 0.06) * (COMPACT ? 1.25 : 1); }
+// velocità di partenza alzata: al livello 1 una parola attraversa lo schermo in circa 16 secondi (prima 25)
+function fallSpeed() { return (H / 720) * (44 + (level - 1) * 14 + (sub - 1) * 4); }
+function spawnInterval() { return Math.max(0.55, 1.8 - (level - 1) * 0.24 - (sub - 1) * 0.06) * (COMPACT ? 1.25 : 1); }
 function bonusSpeed() { return (H / 720) * (95 + (bonusCount - 1) * 28); }
 function bonusInterval() { return Math.max(0.4, 1.15 - (bonusCount - 1) * 0.12) * (COMPACT ? 1.2 : 1); }
 function catWeights() {
