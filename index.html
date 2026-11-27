@@ -35,6 +35,8 @@
 //  WORD RAIN — gioco di digitazione
 // =====================================================================
 
+// Safari su iPhone: se il colore di riempimento è una sfumatura (o semitrasparente) disegna le emoji come sagome.
+// Per questo prima di ogni emoji si imposta un nero pieno: le emoji a colori lo ignorano.
 const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 const HS_KEY = 'pioggiaDiParole_classifica';
 const HS_MAX = 10;
@@ -1336,7 +1338,7 @@ function drawObject(o) {
   ctx.rotate(Math.sin(o.wobble) * 0.25 * o.spin);
   ctx.font = `${Math.round(R * 1.2)}px ${EMOJI_FONT}`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(o.emoji, 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillText(o.emoji, 0, 0);
   ctx.restore();
   if (isT && o.buf) {
     const fs = Math.round(FS * 0.8), str = o.buf + (o.err || '') + '_', pw = measure(str, fs);
